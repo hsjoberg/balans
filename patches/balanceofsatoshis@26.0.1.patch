@@ -1,0 +1,49 @@
+diff --git a/network/probe_destination.js b/network/probe_destination.js
+index 937bacd76640a49a1a519c782886d06302f78a83..233c552a46dc5f3b55723ab09545d779118aabb9 100644
+--- a/network/probe_destination.js
++++ b/network/probe_destination.js
+@@ -693,7 +693,7 @@ module.exports = (args, cbk) => {
+         // Found a successful high value route
+         sub.once('success', ({maximum}) => {
+           return cbk(null, {
+-            maximum: min(outId.max, max(maximum, probe.route.tokens)),
++            maximum: min(args.find_max, outId.max, max(maximum, probe.route.tokens)),
+           });
+         });
+ 
+diff --git a/swaps/rebalance.js b/swaps/rebalance.js
+index f39fa62ecb8c49c3ad85c92f16b7b6fdc2b2b79b..97775c7d267c9437e5bab585da28613d5b1cc2ef 100644
+--- a/swaps/rebalance.js
++++ b/swaps/rebalance.js
+@@ -158,7 +158,7 @@ module.exports = (args, cbk) => {
+           return cbk(null, initialProbeTokens(probeSizeMinimal));
+         }
+ 
+-        return cbk(null, initialProbeTokens(probeSizeRegular));
++        return cbk(null, min(maximum || maxPaymentSize, initialProbeTokens(probeSizeRegular)));
+       }],
+ 
+       // Lnd by itself
+@@ -751,12 +751,12 @@ module.exports = (args, cbk) => {
+       }],
+ 
+       // Create local invoice
+-      invoice: ['channels', 'finalHop', 'lnd', ({finalHop, lnd}, cbk) => {
++      invoice: ['channels', 'finalHop', 'lnd', 'max', ({finalHop, lnd, max}, cbk) => {
+         return createInvoice({
+           lnd,
+           cltv_delta: defaultCltvDelta,
+           description: 'Rebalance',
+-          tokens: finalHop.maximum,
++          tokens: min(finalHop.maximum, max),
+         },
+         cbk);
+       }],
+@@ -967,6 +967,7 @@ module.exports = (args, cbk) => {
+ 
+         return cbk(null, {
+           got_inbound_fee_discount: discount.lowered,
++          payment_id: pay.id,
+           total_execution_time: time,
+           rebalance: [
+             {
