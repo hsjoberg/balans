@@ -1,4 +1,5 @@
 import { cleanAlias, fmt, MIN_AMOUNT, type Goal, type Peer } from './model.ts';
+import { colorsEnabled } from './terminal-style.ts';
 
 const segments = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 
@@ -30,7 +31,7 @@ export function balanceBar(ratio: number, width: number, color = false): string 
 
 export function channelChoices(list: Peer[], side: 'out' | 'in', options: { columns?: number; color?: boolean; goal?: Goal } = {}) {
   const columns = options.columns ?? (process.stdout.columns || 80);
-  const color = options.color ?? (!!process.stdout.isTTY && process.env.NO_COLOR === undefined);
+  const color = options.color ?? colorsEnabled();
   const barWidth = columns >= 78 ? 16 : 10;
   const aliasWidth = Math.max(10, Math.min(28, columns - barWidth - 45));
   const narrow = columns < 65;

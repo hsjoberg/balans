@@ -109,6 +109,8 @@ At the end, the report lists each attempt, sats moved, fees, and each selected c
 
 **Ctrl+C** requests a stop after the current attempt finishes. Sessions are interactive; scheduling and headless execution are not available yet.
 
+Terminal output highlights successful moves and met targets in green, fees and items needing attention in yellow, and fatal errors or unresolved payments in red. Amounts and balance changes use cyan; a source decreasing is expected during a rebalance. Set `NO_COLOR=1` to disable color. Redirected output stays plain text.
+
 ## Session history and recovery
 
 Session journals are saved in `~/.balans/`. A lock prevents overlapping Balans sessions for the same saved-node name on the same machine and OS account. Balans checks for an existing lock as soon as the node name is known, before reading channels or starting the wizard, and acquires the lock after you confirm the plan.

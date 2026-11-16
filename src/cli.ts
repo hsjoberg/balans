@@ -9,6 +9,9 @@ import { runSession } from './runner.ts';
 import { balanceLegend, channelChoices, channelTheme } from './channel-display.ts';
 import { formatSessionReport } from './session-report.ts';
 import { formatGoalGuidance, goalGuidance } from './goal-guidance.ts';
+import { colorsEnabled, terminalStyle } from './terminal-style.ts';
+
+const style = terminalStyle();
 
 const help = `balans — manual Lightning rebalancing, powered by BOS
 
@@ -51,16 +54,16 @@ async function main() {
   const defaultInbound = targetDefault('target-inbound');
   if (!process.stdin.isTTY || !process.stdout.isTTY) throw new Error('The wizard needs an interactive terminal. Headless execution is not available yet. Use --help for usage.');
   const demo = !!values.demo;
-  console.log(`\nBALANS  /  ${demo ? 'DEMO — simulated payments only' : 'manual rebalance session'}\n`);
+  console.log(`\n${style.strong('BALANS')}  /  ${demo ? style.info('DEMO — simulated payments only') : 'manual rebalance session'}\n`);
   const node = demo ? 'demo' : (values.node ?? await input({ message: 'BOS saved node', validate: v => v.trim().length > 0 || 'Enter a saved node name.' })).trim();
   if (!node) throw new Error('Enter a saved node name.');
   checkSessionLock(node);
   const backend = demo ? demoBackend() : bosBackend(node);
-  console.log('Reading public channels…');
+  console.log(style.muted('Reading public channels…'));
   const initial = peers(await backend.snapshot());
   if (!initial.length) throw new Error('No open public channels were found.');
   if (initial.some(p => p.channels.length > 1)) console.log('Peers with multiple channels are grouped. Goals and limits apply to their combined balances.');
-  console.log('Inactive channels and channels with pending HTLCs contribute no available liquidity in the planner.\n');
+  console.log(style.muted('Inactive channels and channels with pending HTLCs contribute no available liquidity in the planner.') + '\n');
 
   const goalChoices = [
     { name: 'Increase outbound liquidity — refill channels so they can send more', value: 'outbound' as const },
@@ -150,55 +153,55 @@ async function main() {
   }
   validatePlan(plan);
   const name = (id: string) => initial.find(p => p.id === id)?.alias ?? id;
-  console.log(`\n7/7 · Review ${demo ? 'SIMULATED' : 'LIVE'} session — node ${cleanAlias(node)} · increase ${mode}`);
+  console.log('\n' + style.strong(`7/7 · Review ${demo ? 'SIMULATED' : 'LIVE'} session — node ${cleanAlias(node)} · increase ${mode}`));
   if (plan.mode === 'outbound') {
-    console.log('Refill these channels to their outbound targets:');
+    console.log(style.strong('Refill these channels to their outbound targets:'));
     console.table(plan.targets.map(t => {
       const p = initial.find(p => p.id === t.peer)!;
       return { Destination: name(t.peer), Outbound: fmt(p.local), Target: fmt(t.minimum), Need: fmt(Math.max(0, t.minimum - p.local)) };
     }));
-    console.log('Supply the sats from these channels:');
+    console.log(style.strong('Supply the sats from these channels:'));
     console.table(plan.sources.map(s => ({ Source: name(s.peer), 'Keep outbound': fmt(s.floor) })));
   } else {
-    console.log('Drain these channels until their inbound targets are met:');
+    console.log(style.strong('Drain these channels until their inbound targets are met:'));
     console.table(plan.sources.map(s => {
       const p = initial.find(p => p.id === s.peer)!;
       return { Source: name(s.peer), Inbound: fmt(p.remote), 'Inbound target': fmt(s.minimumInbound), Need: fmt(Math.max(0, s.minimumInbound - p.remote)), 'Keep outbound': fmt(s.floor) };
     }));
-    console.log('Receive the sats in these channels, within their outbound caps:');
+    console.log(style.strong('Receive the sats in these channels, within their outbound caps:'));
     console.table(plan.targets.map(t => {
       const p = initial.find(p => p.id === t.peer)!;
       return { Destination: name(t.peer), Outbound: fmt(p.local), 'Max outbound': fmt(t.maximum), 'May receive': fmt(Math.max(0, t.maximum - p.local)) };
     }));
   }
-  console.log(`Fee budget: ${fmt(plan.budget)} sats · Max fee: ${fmt(plan.maxFee)} sats/attempt · Max rate: ${fmt(plan.maxFeeRate)} ppm`);
+  console.log(`Fee budget: ${style.info(`${fmt(plan.budget)} sats`)} · Max fee: ${style.warning(`${fmt(plan.maxFee)} sats/attempt`)} · Max rate: ${style.warning(`${fmt(plan.maxFeeRate)} ppm`)}`);
   console.log(`Chunk: up to ${fmt(plan.chunk)} sats · Route search: ${plan.minutes} min · Attempts: at most ${plan.maxAttemptsPerItem} per ${itemLabel}`);
-  console.log('A final 50,000-sat attempt may slightly exceed a target to reach its minimum. All fee and liquidity limits still apply.');
-  if (values['dry-run']) { console.log('\nDry run complete. No rebalances submitted.'); return; }
+  console.log(style.muted('A final 50,000-sat attempt may slightly exceed a target to reach its minimum. All fee and liquidity limits still apply.'));
+  if (values['dry-run']) { console.log('\n' + style.success('Dry run complete. No rebalances submitted.')); return; }
   if (!await confirm({ message: demo ? 'Run this simulation?' : 'Start rebalancing with these limits?', default: false })) { console.log('Cancelled. No rebalances submitted.'); return; }
 
   const journal = openJournal(node);
   let uncertain = false;
   let stopping = false;
-  const stop = () => { stopping = true; console.log('\nStopping after the current BOS call settles. Keep this terminal open.'); };
+  const stop = () => { stopping = true; console.log('\n' + style.warning('Stopping after the current BOS call settles. Keep this terminal open.')); };
   process.on('SIGINT', stop);
   try {
     journal.write({ type: 'plan', demo, plan });
-    console.log(`Session journal: ${journal.path}\nCtrl+C requests a stop after the current attempt.\n`);
+    console.log(style.muted(`Session journal: ${journal.path}\nCtrl+C requests a stop after the current attempt.`) + '\n');
     const summary = await runSession(plan, backend, event => {
       journal.write(event);
       if (event.type === 'reserved') {
         uncertain = true;
-        console.log(`${name(event.attempt.source)} → ${name(event.attempt.target)}: up to ${fmt(event.attempt.amount)} sats; fee cap ${fmt(event.attempt.reserved)} sats. BOS is searching…`);
+        console.log(`${style.strong(name(event.attempt.source))} → ${style.strong(name(event.attempt.target))}: up to ${style.info(`${fmt(event.attempt.amount)} sats`)}; fee cap ${style.warning(`${fmt(event.attempt.reserved)} sats`)}. ${style.muted('BOS is searching…')}`);
       } else {
         uncertain = event.outcome.status === 'unknown';
-        if (event.outcome.status === 'success') console.log(`  Moved ${fmt(event.outcome.moved)} sats; fees ≈${fmt(event.outcome.fee)} sats; budget remaining ${fmt(plan.budget - event.spent)} sats.`);
-        else console.log(`  ${event.outcome.status}: ${event.outcome.reason}`);
+        if (event.outcome.status === 'success') console.log(`  ${style.success(`Moved ${fmt(event.outcome.moved)} sats`)}; fees ${style.warning(`≈${fmt(event.outcome.fee)} sats`)}; budget remaining ${style.info(`${fmt(plan.budget - event.spent)} sats`)}.`);
+        else console.log(`  ${(event.outcome.status === 'unknown' || event.outcome.stop ? style.error : style.warning)(`${event.outcome.status}: ${event.outcome.reason}`)}`);
       }
     }, () => stopping);
     journal.write({ type: 'summary', ...summary });
-    console.log(formatSessionReport(plan, summary, name));
-    if (uncertain) console.log('Session lock retained. Reconcile the unresolved payment in LND and inspect the journal before removing the lock and starting again.');
+    console.log(formatSessionReport(plan, summary, name, colorsEnabled()));
+    if (uncertain) console.log(style.error('Session lock retained. Reconcile the unresolved payment in LND and inspect the journal before removing the lock and starting again.'));
     if (uncertain || summary.balanceReadFailed || summary.results.some(r => r.outcome.status === 'failed' && r.outcome.stop)) process.exitCode = 1;
   } finally {
     process.off('SIGINT', stop);
@@ -208,6 +211,6 @@ async function main() {
 
 main().catch(error => {
   if (error?.name === 'ExitPromptError') { console.log('\nCancelled.'); process.exitCode = 130; return; }
-  console.error(`\n${error instanceof Error ? error.message : 'Unexpected failure. Inspect the session journal before retrying.'}`);
+  console.error('\n' + style.error(error instanceof Error ? error.message : 'Unexpected failure. Inspect the session journal before retrying.'));
   process.exitCode = 1;
 });

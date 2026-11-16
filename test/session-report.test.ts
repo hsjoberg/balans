@@ -22,6 +22,10 @@ test('captures fresh before/after observations separately from confirmed transfe
   expect(summary.after?.map(c => c.local)).toEqual([2_499_600, 990_000]);
   expect(summary.results[0]?.outcome).toEqual({ status: 'success', moved: 500_000, fee: 400 });
   const report = formatSessionReport(plan, summary);
+  const colored = formatSessionReport(plan, summary, peer => peer, true);
+  expect(colored).toContain('\x1b[');
+  expect(Bun.stripANSI(colored)).toBe(report);
+  expect(report).not.toContain('\x1b[');
   expect(report).toContain('1 succeeded · 0 failed · 1 attempt');
   expect(report).toContain('1. Source → Target');
   expect(report).toContain('500,000 → 990,000 (+490,000)');
